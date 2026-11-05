@@ -47,6 +47,7 @@ struct EditorViewContainer: UIViewRepresentable {
         private var lastWireframe = false
         private var lastRevision = -1
         var pendingUpdate: DispatchWorkItem?
+        private var lastViewport = CGSize.zero
         private var center = SIMD3<Float>(0, 1, 0)
         private var yaw: Float = 0.55
         private var pitch: Float = 0.32
@@ -91,6 +92,13 @@ struct EditorViewContainer: UIViewRepresentable {
             view.addGestureRecognizer(reset)
             view.isAccessibilityElement = true
             view.accessibilityLabel = "3Dルーム。1本指で回転、ピンチで拡大、2本指で移動、ダブルタップで視点をリセットします。下の部分一覧からも選択できます。"
+            // UIViewRepresentable may initially have zero bounds. Refit once after its
+            // first layout, using the narrower horizontal/vertical field of view.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                guard let self = self, let document = self.model.document else { return }
+                self.fitCamera(document)
+                self.lastViewport = self.view?.bounds.size ?? .zero
+            }
         }
 
         func scheduleUpdate() {
@@ -114,6 +122,10 @@ struct EditorViewContainer: UIViewRepresentable {
                 lastWireframe = false
                 lastRevision = -1
                 fitCamera(document)
+            }
+            if let size = view?.bounds.size, size.width > 0, size.height > 0, size != lastViewport {
+                fitCamera(document)
+                lastViewport = size
             }
             if isNew || lastRevision != model.editRevision {
                 for part in document.parts {
@@ -175,8 +187,13 @@ struct EditorViewContainer: UIViewRepresentable {
             guard low.x.isFinite, high.x.isFinite, low.x <= high.x else { return }
             center = (low + high) * 0.5
             let extent = max(1, simd_length(high - low))
-            radius = extent * 0.9
-            maximumRadius = max(8, extent * 4)
+            let viewport = view?.bounds.size ?? CGSize(width: 1, height: 1)
+            let aspect = viewport.width > 0 && viewport.height > 0 ? Float(viewport.width / viewport.height) : 1
+            let verticalHalfFOV: Float = 58 * .pi / 360
+            let horizontalHalfFOV = atan(tan(verticalHalfFOV) * max(0.08, aspect))
+            let limitingHalfFOV = min(verticalHalfFOV, horizontalHalfFOV)
+            radius = extent * 0.5 / max(0.02, sin(limitingHalfFOV)) * 1.05
+            maximumRadius = max(8, radius * 4)
             yaw = 0.55; pitch = 0.32
             placeCamera()
         }

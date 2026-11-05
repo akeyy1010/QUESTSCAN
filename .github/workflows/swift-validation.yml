@@ -3,6 +3,10 @@ name: Swift validation
 on:
   push:
     branches: [main]
+    paths:
+      - 'QUESTSCAN.swiftpm/**'
+      - 'Tests/**'
+      - '.github/workflows/swift-validation.yml'
   workflow_dispatch:
 
 permissions:
