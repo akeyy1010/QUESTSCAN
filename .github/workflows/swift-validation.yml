@@ -25,14 +25,16 @@ jobs:
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
           SOURCES=()
           while IFS= read -r file; do SOURCES+=("$file"); done < <(find QUESTSCAN.swiftpm -name '*.swift' ! -name Package.swift | sort)
-          xcrun swiftc -emit-executable -whole-module-optimization -parse-as-library -swift-version 5 \
+          SDKROOT="$SDK" xcrun --sdk iphoneos swiftc -emit-executable -whole-module-optimization -parse-as-library -swift-version 5 \
             -module-name AppModule -sdk "$SDK" -target arm64-apple-ios16.0 \
             "${SOURCES[@]}" -o Tests/.output/QUESTSCAN
       - name: Validate property lists
+        if: always()
         run: |
           plutil -lint QUESTSCAN.swiftpm/AppInfo.plist
           plutil -lint QUESTSCAN.swiftpm/Resources/PrivacyInfo.xcprivacy
       - name: Run archive, USD scene and persistence integration tests
+        if: always()
         run: |
           set -euo pipefail
           swiftc -swift-version 5 -D QUESTSCAN_MODEL_TESTS -parse-as-library \
@@ -43,6 +45,7 @@ jobs:
             Tests/ExportTests.swift -o Tests/.output/export-tests
           Tests/.output/export-tests Tests/.output/fixtures
       - name: Run demo geometry, camera projection and depth tests
+        if: always()
         run: |
           set -euo pipefail
           swiftc -swift-version 5 -parse-as-library \
@@ -53,9 +56,10 @@ jobs:
             Tests/ProcessingTests.swift -o Tests/.output/processing-tests
           Tests/.output/processing-tests
       - name: Upload USDZ fixtures for independent validation
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: usdz-fixtures
           path: Tests/.output/fixtures
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7

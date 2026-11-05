@@ -132,9 +132,11 @@ enum ScanLibrary {
 
     private static func readDocument(at url: URL, expectedID: UUID, in directory: URL) throws -> SceneDocument {
         let expected = directory.appendingPathComponent(filename(expectedID))
-        guard url.isFileURL, url.path == expected.path,
+        // Apple platforms may enumerate /var as /private/var. Compare canonical paths,
+        // while still rejecting final symlinks, traversal and mismatched file names.
+        guard url.isFileURL, url.lastPathComponent == expected.lastPathComponent,
               !url.pathComponents.contains(".."), !url.pathComponents.contains("."),
-              url.resolvingSymlinksInPath().path == expected.resolvingSymlinksInPath().path else {
+              url.standardizedFileURL.resolvingSymlinksInPath().path == expected.standardizedFileURL.resolvingSymlinksInPath().path else {
             throw LibraryError.unsafeEntry
         }
         try requireRegularFile(url) // rejects symbolic links, directories and devices
