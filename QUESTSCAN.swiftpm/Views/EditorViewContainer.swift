@@ -216,7 +216,10 @@ struct EditorViewContainer: UIViewRepresentable {
             let move = recognizer.translation(in: view)
             let right = SIMD3<Float>(cos(yaw), 0, -sin(yaw))
             let up = SIMD3<Float>(0, 1, 0)
-            center = focusOrigin - right * Float(move.x) * radius * 0.0015 + up * Float(move.y) * radius * 0.0015
+            let horizontal: Float = Float(move.x) * radius * 0.0015
+            let vertical: Float = Float(move.y) * radius * 0.0015
+            let shifted: SIMD3<Float> = focusOrigin - right * horizontal
+            center = shifted + up * vertical
             placeCamera()
         }
 

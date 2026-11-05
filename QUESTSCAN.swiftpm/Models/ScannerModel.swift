@@ -75,7 +75,7 @@ final class ScannerModel: ObservableObject {
         case .authorized: beginScan()
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
                     guard let self = self else { return }
                     if granted { self.beginScan() } else { self.cameraDenied() }
                 }
@@ -140,7 +140,7 @@ final class ScannerModel: ObservableObject {
             self.processingQueue.async { [weak self] in
                 do {
                     var result = try TextureProjector.build(meshes: meshes, photos: photos, mode: mode, name: name) { progress in
-                        DispatchQueue.main.async {
+                        DispatchQueue.main.async { [weak self] in
                             guard let self = self, self.operationID == token else { return }
                             self.processingProgress = min(1, max(0, progress))
                         }
@@ -149,7 +149,7 @@ final class ScannerModel: ObservableObject {
                     result.document.photosCaptured = photos.count
                     result.document.thumbnailJPEG = photos.first?.jpeg
                     let built = result
-                    DispatchQueue.main.async {
+                    DispatchQueue.main.async { [weak self] in
                         guard let self = self, self.operationID == token else { return }
                         self.document = built.document
                         self.selectedPartID = nil
@@ -162,7 +162,7 @@ final class ScannerModel: ObservableObject {
                         self.saveDocument()
                     }
                 } catch {
-                    DispatchQueue.main.async {
+                    DispatchQueue.main.async { [weak self] in
                         guard let self = self, self.operationID == token else { return }
                         self.isBusy = false
                         self.screen = .home
@@ -200,9 +200,9 @@ final class ScannerModel: ObservableObject {
         storageQueue.async { [weak self] in
             do {
                 let entries = try ScanLibrary.entries()
-                DispatchQueue.main.async { self?.library = entries }
+                DispatchQueue.main.async { [weak self] in self?.library = entries }
             } catch {
-                DispatchQueue.main.async { self?.errorMessage = "保存一覧を読み込めません: \(error.localizedDescription)" }
+                DispatchQueue.main.async { [weak self] in self?.errorMessage = "保存一覧を読み込めません: \(error.localizedDescription)" }
             }
         }
     }
@@ -213,7 +213,7 @@ final class ScannerModel: ObservableObject {
         storageQueue.async { [weak self] in
             do {
                 let loaded = try ScanLibrary.load(entry)
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
                     guard let self = self else { return }
                     self.document = loaded
                     self.selectedPartID = nil
@@ -225,7 +225,7 @@ final class ScannerModel: ObservableObject {
                     self.statusMessage = "端末内に保存したスキャンを開きました。"
                 }
             } catch {
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
                     self?.isBusy = false
                     self?.errorMessage = "スキャンを開けません: \(error.localizedDescription)"
                 }
@@ -239,12 +239,12 @@ final class ScannerModel: ObservableObject {
         storageQueue.async { [weak self] in
             do {
                 try ScanLibrary.delete(entry)
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
                     self?.isBusy = false
                     self?.refreshLibrary()
                 }
             } catch {
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
                     self?.isBusy = false
                     self?.errorMessage = "削除に失敗しました: \(error.localizedDescription)"
                 }
@@ -258,13 +258,13 @@ final class ScannerModel: ObservableObject {
         storageQueue.async { [weak self] in
             do {
                 try ScanLibrary.save(copy)
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
                     self?.isBusy = false
                     self?.statusMessage = "端末内に保存しました。撮影画像は外部へ送信されていません。"
                     self?.refreshLibrary()
                 }
             } catch {
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
                     self?.isBusy = false
                     self?.errorMessage = "保存に失敗しました: \(error.localizedDescription)"
                 }
@@ -285,14 +285,14 @@ final class ScannerModel: ObservableObject {
                 for url in old { try? FileManager.default.removeItem(at: url) }
                 let url = folder.appendingPathComponent("QUESTSCAN-\(copy.id.uuidString.prefix(8)).usdz")
                 try USDZExporter.export(copy, to: url)
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
                     self?.isBusy = false
                     self?.shareURL = url
                     self?.showShare = true
                     self?.statusMessage = "USDZを作成しました。共有先を選択してください。"
                 }
             } catch {
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
                     self?.isBusy = false
                     self?.errorMessage = "USDZ書き出しに失敗しました: \(error.localizedDescription)"
                 }
