@@ -1,17 +1,45 @@
 # QUESTSCAN
 
-Swift Playgrounds用の空間スキャン・3Dカラー編集アプリ。添付された開発計画をもとに、iOS 16以降で動作するSwift App Packageを実装しています。
+Swift Playgrounds向けの、空間スキャン・写真テクスチャ投影・3Dカラー編集アプリです。外部サービスや外部Swiftパッケージを使わず、SwiftUI／ARKit／RealityKit／Core Image／Foundationで動作します。アプリのソースは **[QUESTSCAN.swiftpm](QUESTSCAN.swiftpm)** です。
 
-## 開く
+## 開く・実行する
 
-`QUESTSCAN.swiftpm` フォルダをフォルダ名ごと保持してiPadまたはMacへコピーし、Swift Playgroundsで開きます。ARスキャンは対応するiPad／iPhoneの実機で行います。Playgroundsの実行ターゲットはiOSです。
+**[Swift Playgrounds用パッケージをダウンロード](Dist/QUESTSCAN.swiftpm.zip)**。ZIPを展開し、`QUESTSCAN.swiftpm` を開いてください。[SHA-256](Dist/SHA256SUMS.txt)も用意しています。
 
-LiDAR対応端末ではARKitメッシュ、非LiDAR端末ではARKitの検出平面を使います。非LiDAR端末の平面スキャンは家具を含む完全な3D再構成ではありません。デモルームではカメラを使わず3D編集を試せます。
+このリポジトリを取得し、`QUESTSCAN.swiftpm` フォルダの名前と内部構成を保持したまま、Swift Playgroundsで開いて実行します。`Package.swift` 単体ではなくパッケージ全体を開いてください。iOS／iPadOS 16以降の実機向けです。Macで編集する場合も、ARスキャンの動作確認には対応するiPad／iPhoneを使用します。iPhoneへのインストールにはXcodeと個人の署名設定が必要です。
 
-## 実装構成
+まずホームから「デモルーム」を開くと、カメラ権限なしで、床・ソファ・テーブル・窓・植物を備えた手続き生成ルームを編集できます。デモには撮影結果と紛らわしい架空のスキャン統計を使っていません。
 
-`QUESTSCAN.swiftpm` にSwiftUI・ARKit・RealityKitのソースを格納します。撮影画像は端末内で処理し、観測面への写真投影、部分メッシュの色編集、端末内保存、USDZ書き出し・共有を行います。外部パッケージやクラウドAPIは使用しません。
+詳しいインストールと操作は **[利用ガイド](Docs/UserGuide.md)**、内部構成は **[アーキテクチャ](Docs/Architecture.md)** を参照してください。
 
-現在の作業段階: 基盤・データモデルを追加。後続コミットでスキャン、編集、書き出し、検証と利用手順を追加します。
+![iPhoneシミュレータのデモ編集画面](Docs/Screenshots/iphone-demo.png)
 
-元の仕様は [Docs/OriginalSpecification.md](Docs/OriginalSpecification.md) です。最終的な検証範囲と実機確認項目もDocsへ記録します。
+## 実装した機能
+
+LiDAR対応端末では、ARKitの実メッシュを取得し、対応時には床・壁・天井・テーブル・椅子等の分類を保持します。ネオンワイヤーフレームを重ね、位置・角度・追跡状態に基づいて写真を自動撮影します。一時停止・再開、手動撮影、バックグラウンド時の休止、カメラ権限拒否時の案内も実装しています。
+
+撮影画像とカメラの内部パラメータ・位置姿勢から、三角形ごとに適切な写真を選択して投影します。利用できる場合はLiDAR深度も遮蔽判定に使います。写真のない面は形状として保持します。3Dプレビューでは回転・ズーム・視点移動・タップ選択ができ、部分メッシュの色、着色強度、明るさ、コントラスト、彩度を変更できます。Undo／Redo、リセット、ワイヤー表示にも対応します。
+
+生成したモデルは端末内へ自動保存し、保存一覧から再編集できます。USDZ書き出しでは、形状・法線・UV・マテリアル・編集済みJPEGをひとつにまとめ、iOSの共有シートへ渡します。USDZは非圧縮ZIPの64バイトアラインメント、CRC32、USDPreviewSurface、パッケージ内テクスチャ参照を実装した自己完結型です。
+
+## 端末と品質について
+
+非LiDAR端末では、検出した平面を取得する**平面スキャン**として動作します。家具を含む完全な立体復元ではありません。AR非対応端末やシミュレータではデモを利用してください。
+
+写真カバー率は、検出済みの面に写真が適合する割合であり、部屋全体の完成率ではありません。選択対象はアンカー・分類・使用写真ごとの部分メッシュで、家具の完全なAIインスタンス分割ではありません。写真の継ぎ目、深度のない画像の遮蔽、鏡・ガラス・暗所、計測精度には限界があります。
+
+端末負荷を抑えるため、写真は最大32枚、保持メッシュは最大60,000面・64アンカー、投影対象は最大48アンカー、出力は最大512部分です。取得時には1アンカーあたり5,000面の上限もあります。必要な間引き・省略や未投影への切り替えは説明を表示します。広い場所は小さな範囲へ分けて撮影してください。
+
+## プライバシー・保存
+
+画像・深度・モデルは端末内で処理・保存します。アプリ自身によるクラウド送信・広告・アナリティクス・会員登録はありません。共有は利用者の明示的な操作によって行います。
+
+ネイティブプロジェクトは `Documents/QUESTSCAN/*.questscan` に保存されます。アプリ削除前に必要なデータを別の場所へバックアップしてください。USDZは閲覧用で、Undo履歴や編集プロジェクトの代替ではありません。
+
+## 検証
+
+[GitHub Actions](https://github.com/akeyy1010/QUESTSCAN/actions/workflows/swift-validation.yml) で、AppleのiOS SDKを使用した全ソースのコンパイル・リンク、プロパティリスト検査、ZIP／USDシーン／端末内保存テスト、デモ形状／カメラ投影／深度／上限テストを実行します。Linuxの構文チェックだけでビルド済みと表現しません。
+
+テスト範囲と実行結果は **[検証記録](Docs/Validation.md)** に記載します。カメラ・LiDAR・GPU描画・Swift Playgroundsでの実行・Quick Lookの実機確認は **[実機テスト項目](Docs/DeviceTestChecklist.md)** に分けています。SDKでコンパイルできることは、実機テストやApp Store提出の完了を意味しません。
+
+元の計画書は [OriginalSpecification.md](Docs/OriginalSpecification.md)、API参照は [APISources.md](Docs/APISources.md)、画像投影の参照は [ProcessingAPIReferences.md](Docs/ProcessingAPIReferences.md)、USDZの参照は [ExportSourceNotes.md](Docs/ExportSourceNotes.md) です。
