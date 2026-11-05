@@ -26,7 +26,7 @@ enum ScanLibrary {
     static let maximumFileBytes = 200 * 1024 * 1024
     static let maximumTriangles = 60_000
     static let maximumVertices = 180_000
-    static let maximumParts = 4096 // 256 anchors × classifications + photo groups
+    static let maximumParts = 512 // Matches the projector's total grouping budget.
     static let maximumTextureBytes = 32 * 1024 * 1024
     private static let lock = NSLock()
 
@@ -197,11 +197,7 @@ enum ScanLibrary {
                 try fail("メッシュサイズ"); return
             }
             guard part.vertices.allSatisfy({ bounded($0.x, 10_000) && bounded($0.y, 10_000) && bounded($0.z, 10_000) }),
-                  part.normals.allSatisfy({ normal in
-                      bounded(normal.x, 2) && bounded(normal.y, 2) && bounded(normal.z, 2) &&
-                      Double(normal.x) * Double(normal.x) + Double(normal.y) * Double(normal.y) +
-                      Double(normal.z) * Double(normal.z) > 1e-12
-                  }),
+                  part.normals.allSatisfy(validNormal),
                   part.textureCoordinates.allSatisfy({ bounded($0.x, 10_000) && bounded($0.y, 10_000) }) else {
                 try fail("頂点・法線・UV"); return
             }
@@ -233,6 +229,13 @@ enum ScanLibrary {
                 guard imageBytes <= maximumFileBytes / 4 * 3 else { throw LibraryError.oversizedFile }
             }
         }
+    }
+
+    private static func validNormal(_ normal: SIMD3<Float>) -> Bool {
+        guard bounded(normal.x, 2), bounded(normal.y, 2), bounded(normal.z, 2) else { return false }
+        let x = Double(normal.x), y = Double(normal.y), z = Double(normal.z)
+        let magnitudeSquared: Double = x * x + y * y + z * z
+        return magnitudeSquared > 1e-12
     }
 
     private static func bounded(_ value: Float, _ limit: Float) -> Bool { value.isFinite && abs(value) <= limit }

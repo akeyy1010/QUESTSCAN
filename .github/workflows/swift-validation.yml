@@ -25,7 +25,7 @@ jobs:
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
           SOURCES=()
           while IFS= read -r file; do SOURCES+=("$file"); done < <(find QUESTSCAN.swiftpm -name '*.swift' ! -name Package.swift | sort)
-          xcrun swiftc -emit-executable -parse-as-library -swift-version 5 \
+          xcrun swiftc -emit-executable -whole-module-optimization -parse-as-library -swift-version 5 \
             -module-name AppModule -sdk "$SDK" -target arm64-apple-ios16.0 \
             "${SOURCES[@]}" -o Tests/.output/QUESTSCAN
       - name: Validate property lists
