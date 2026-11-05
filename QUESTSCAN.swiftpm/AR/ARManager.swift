@@ -398,7 +398,7 @@ final class ARManager: NSObject, ARSessionDelegate {
         guard case .normal = frame.camera.trackingState else { return }
         guard running, !paused, !interrupted else { return }
         guard photos.count < options.maxPhotos else {
-            if manual { deliverError("写真の上限（最大32枚）に達しました", generation: generation) }
+            if manual { deliverError("写真の設定上限（\(options.maxPhotos)枚）に達しました", generation: generation) }
             return
         }
         guard frame.lightEstimate.map({ $0.ambientIntensity >= 150 }) ?? true else { return }
@@ -415,7 +415,8 @@ final class ARManager: NSObject, ARSessionDelegate {
             let angle = 2 * acos(cosine)
             guard translation >= options.translationThreshold || angle >= options.rotationThreshold else { return }
         }
-        guard let photo = makePhoto(frame, longestSide: lowPower ? 960 : 1_280) else {
+        guard let photo = makePhoto(frame, longestSide: lowPower ? min(960, options.photoLongEdge) : options.photoLongEdge,
+                                    jpegQuality: options.jpegQuality) else {
             trackingMessage = "写真を保存できませんでした・明るい面を映して再撮影してください"
             if manual { deliverError("カメラ画像の保存に失敗しました", generation: generation) }
             return
@@ -426,7 +427,7 @@ final class ARManager: NSObject, ARSessionDelegate {
         estimateDirty = true
     }
 
-    private func makePhoto(_ frame: ARFrame, longestSide: Int) -> CameraSnapshot? {
+    private func makePhoto(_ frame: ARFrame, longestSide: Int, jpegQuality: Double) -> CameraSnapshot? {
         let buffer = frame.capturedImage
         let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
         guard width > 0, height > 0 else { return nil }
@@ -435,12 +436,20 @@ final class ARManager: NSObject, ARSessionDelegate {
         let outputWidth = max(1, Int((CGFloat(width) * scale).rounded()))
         let outputHeight = max(1, Int((CGFloat(height) * scale).rounded()))
         guard let cgImage = imageContext.createCGImage(image, from: CGRect(x: 0, y: 0, width: CGFloat(outputWidth), height: CGFloat(outputHeight))) else { return nil }
-        let bytes = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(bytes, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
-        // No UIImage rotation, displayTransform, or orientation conversion: native image axes.
-        CGImageDestinationAddImage(destination, cgImage, [kCGImageDestinationLossyCompressionQuality: 0.72,
-                                                        kCGImagePropertyOrientation: 1] as CFDictionary)
-        guard CGImageDestinationFinalize(destination), bytes.length <= 1_500_000 else { return nil }
+        // Respect the requested quality where possible, but progressively compress
+        // rather than dropping a useful photo when a detailed room exceeds the cap.
+        let candidates = Array(Set([jpegQuality, max(0.58, jpegQuality * 0.85), 0.58])).sorted(by: >)
+        var encodedJPEG: Data?
+        for quality in candidates {
+            let bytes = NSMutableData()
+            guard let destination = CGImageDestinationCreateWithData(bytes, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+            // No UIImage rotation, displayTransform, or orientation conversion: native image axes.
+            CGImageDestinationAddImage(destination, cgImage, [kCGImageDestinationLossyCompressionQuality: quality,
+                                                              kCGImagePropertyOrientation: 1] as CFDictionary)
+            guard CGImageDestinationFinalize(destination) else { continue }
+            if bytes.length <= 1_500_000 { encodedJPEG = bytes as Data; break }
+        }
+        guard let jpeg = encodedJPEG else { return nil }
         let transform = frame.camera.transform
         var intrinsics = frame.camera.intrinsics
         // Usually identical. Handle any buffer-resolution discrepancy without lying about pixels.
@@ -453,7 +462,7 @@ final class ARManager: NSObject, ARSessionDelegate {
         var result = CameraSnapshot(timestamp: frame.timestamp,
                                     transform: (0..<4).flatMap { column in (0..<4).map { transform[column][$0] } },
                                     intrinsics: (0..<3).flatMap { column in (0..<3).map { intrinsics[column][$0] } },
-                                    width: width, height: height, jpeg: bytes as Data)
+                                    width: width, height: height, jpeg: jpeg)
         if let depthData = frame.sceneDepth ?? frame.smoothedSceneDepth,
            let depth = copyDepth(depthData) {
             result.depth = depth.values; result.depthWidth = depth.width; result.depthHeight = depth.height
@@ -661,19 +670,11 @@ final class ARManager: NSObject, ARSessionDelegate {
     }
 
     private func sanitized(_ proposed: ScanOptions) -> ScanOptions {
-        var result = proposed
-        result.maxPhotos = min(32, max(1, proposed.maxPhotos))
-        result.maxTriangles = min(60_000, max(1, proposed.maxTriangles))
-        result.captureInterval = proposed.captureInterval.isFinite ? min(30, max(0.6, proposed.captureInterval)) : 1.2
-        result.translationThreshold = proposed.translationThreshold.isFinite ? min(3, max(0.03, proposed.translationThreshold)) : 0.18
-        result.rotationThreshold = proposed.rotationThreshold.isFinite ? min(Float.pi, max(0.03, proposed.rotationThreshold)) : 0.18
-        return result
+        proposed.sanitized()
     }
 
     private func sameOptions(_ a: ScanOptions, _ b: ScanOptions) -> Bool {
-        a.autoCapture == b.autoCapture && a.wireframe == b.wireframe && a.maxPhotos == b.maxPhotos
-            && a.captureInterval == b.captureInterval && a.translationThreshold == b.translationThreshold
-            && a.rotationThreshold == b.rotationThreshold && a.maxTriangles == b.maxTriangles
+        a == b
     }
 
     @MainActor

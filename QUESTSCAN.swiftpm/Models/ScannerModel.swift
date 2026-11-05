@@ -47,6 +47,7 @@ final class ScannerModel: ObservableObject {
     }
 
     init() {
+        options = ScanOptions.stored()
         arManager.onStatistics = { [weak self] value in self?.statistics = value }
         arManager.onError = { [weak self] message in
             guard let self = self, self.screen == .scanning else { return }
@@ -62,6 +63,14 @@ final class ScannerModel: ObservableObject {
                 self.statusMessage = "バックグラウンド移行で一時停止しました。戻ったら再開してください。"
             }.store(in: &subscriptions)
         refreshLibrary()
+    }
+
+    func applyScanOptions(_ value: ScanOptions) {
+        let safe = value.sanitized()
+        guard safe != options else { return }
+        options = safe
+        safe.persist()
+        if screen == .scanning { arManager.updateOptions(safe) }
     }
 
     func startScan() {

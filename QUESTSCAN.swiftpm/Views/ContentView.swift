@@ -5,6 +5,7 @@ import UIKit
 struct ContentView: View {
     @ObservedObject var model: ScannerModel
     @State private var showGuide = false
+    @State private var showSettings = ProcessInfo.processInfo.arguments.contains("--questscan-settings")
     @State private var confirmCancel = false
     @State private var confirmBack = false
     @State private var pendingDeletion: LibraryEntry?
@@ -73,10 +74,13 @@ struct ContentView: View {
     private func screen(size: CGSize) -> some View {
         switch model.screen {
         case .home:
-            HomeScreenView(model: model, availableWidth: size.width, onGuide: { showGuide = true }, onDelete: { entry in
+            HomeScreenView(model: model, availableWidth: size.width, onGuide: { showGuide = true }, onSettings: { showSettings = true }, onDelete: { entry in
                 pendingDeletion = entry
                 confirmDeletion = true
             })
+            .sheet(isPresented: $showSettings) {
+                ScanSettingsView(model: model)
+            }
         case .scanning:
             ScanScreenView(model: model, availableSize: size, onCancel: { confirmCancel = true }, onGuide: { showGuide = true })
         case .processing:
@@ -94,6 +98,7 @@ private struct HomeScreenView: View {
     @ObservedObject var model: ScannerModel
     let availableWidth: CGFloat
     let onGuide: () -> Void
+    let onSettings: () -> Void
     let onDelete: (LibraryEntry) -> Void
     @Environment(\.openURL) private var openURL
     private var wide: Bool { availableWidth >= 760 }
@@ -134,6 +139,7 @@ private struct HomeScreenView: View {
                 Text("空間を持ち歩く、3Dスキャナー").font(.system(size: 10)).foregroundColor(CyberColor.muted)
             }
             Spacer(minLength: 8)
+            CyberIconButton(symbol: "gearshape", label: "スキャン設定", color: CyberColor.cyan, action: onSettings)
             CyberIconButton(symbol: "questionmark", label: "使い方とプライバシー", color: CyberColor.lilac, action: onGuide)
         }
     }

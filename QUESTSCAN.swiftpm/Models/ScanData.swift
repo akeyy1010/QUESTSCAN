@@ -121,14 +121,84 @@ struct ScanStatistics {
     var retentionLimited: Bool = false
 }
 
-struct ScanOptions {
+enum CaptureSensitivity: String, Codable, CaseIterable, Identifiable {
+    case conservative, balanced, responsive
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .conservative: return "控えめ"
+        case .balanced: return "標準"
+        case .responsive: return "高感度"
+        }
+    }
+    var detail: String {
+        switch self {
+        case .conservative: return "大きく移動したときに撮影。枚数と重複を抑えます。"
+        case .balanced: return "移動と角度の変化を標準的に撮影します。"
+        case .responsive: return "小さな移動でも撮影。重複や容量が増える場合があります。"
+        }
+    }
+    var minimumMovement: Float {
+        switch self { case .conservative: return 0.35; case .balanced: return 0.18; case .responsive: return 0.08 }
+    }
+    var minimumRotation: Float {
+        switch self { case .conservative: return 0.35; case .balanced: return 0.18; case .responsive: return 0.08 }
+    }
+    var interval: TimeInterval {
+        switch self { case .conservative: return 2.0; case .balanced: return 1.2; case .responsive: return 0.7 }
+    }
+}
+
+struct ScanOptions: Codable, Equatable {
     var autoCapture = true
     var wireframe = true
     var maxPhotos = 32
-    var captureInterval: TimeInterval = 1.2
-    var translationThreshold: Float = 0.18
-    var rotationThreshold: Float = 0.18
+    var sensitivity: CaptureSensitivity = .balanced
+    var captureInterval: TimeInterval = CaptureSensitivity.balanced.interval
+    var translationThreshold: Float = CaptureSensitivity.balanced.minimumMovement
+    var rotationThreshold: Float = CaptureSensitivity.balanced.minimumRotation
     var maxTriangles = 60_000
+    var photoLongEdge = 1_280
+    var jpegQuality = 0.72
+
+    static let photoLimitChoices = [8, 16, 24, 32]
+    static let qualityChoices = [20_000, 40_000, 60_000]
+    static let resolutionChoices = [960, 1_280]
+    static let jpegQualityChoices: [Double] = [0.58, 0.72, 0.85]
+
+    mutating func selectSensitivity(_ value: CaptureSensitivity) {
+        sensitivity = value
+        captureInterval = value.interval
+        translationThreshold = value.minimumMovement
+        rotationThreshold = value.minimumRotation
+    }
+
+    static func stored() -> ScanOptions {
+        guard let data = UserDefaults.standard.data(forKey: "QUESTSCAN.scanOptions"),
+              let value = try? JSONDecoder().decode(ScanOptions.self, from: data) else { return ScanOptions() }
+        return value.sanitized()
+    }
+
+    func sanitized() -> ScanOptions {
+        var result = self
+        result.maxPhotos = Self.photoLimitChoices.contains(maxPhotos) ? maxPhotos : 32
+        result.maxTriangles = Self.qualityChoices.contains(maxTriangles) ? maxTriangles : 60_000
+        result.photoLongEdge = Self.resolutionChoices.contains(photoLongEdge) ? photoLongEdge : 1_280
+        result.jpegQuality = Self.jpegQualityChoices.contains(jpegQuality) ? jpegQuality : 0.72
+        result.captureInterval = captureInterval.isFinite ? min(3, max(0.6, captureInterval)) : CaptureSensitivity.balanced.interval
+        result.translationThreshold = translationThreshold.isFinite ? min(1, max(0.03, translationThreshold)) : CaptureSensitivity.balanced.minimumMovement
+        result.rotationThreshold = rotationThreshold.isFinite ? min(Float.pi, max(0.03, rotationThreshold)) : CaptureSensitivity.balanced.minimumRotation
+        // Sensitivity is the source of truth; avoid inconsistent slider values after restoring settings.
+        result.captureInterval = result.sensitivity.interval
+        result.translationThreshold = result.sensitivity.minimumMovement
+        result.rotationThreshold = result.sensitivity.minimumRotation
+        return result
+    }
+
+    func persist() {
+        guard let data = try? JSONEncoder().encode(sanitized()) else { return }
+        UserDefaults.standard.set(data, forKey: "QUESTSCAN.scanOptions")
+    }
 }
 
 struct BuildResult {

@@ -45,10 +45,14 @@ while read -r family udid; do
   sleep 6
   xcrun simctl io "$udid" screenshot "Tests/.output/screenshots/$family-home.png"
   xcrun simctl terminate "$udid" com.questscan.roomstudio
+  xcrun simctl launch "$udid" com.questscan.roomstudio --questscan-settings
+  sleep 5
+  xcrun simctl io "$udid" screenshot "Tests/.output/screenshots/$family-settings.png"
+  xcrun simctl terminate "$udid" com.questscan.roomstudio
   xcrun simctl launch "$udid" com.questscan.roomstudio --questscan-demo
   sleep 8
   xcrun simctl io "$udid" screenshot "Tests/.output/screenshots/$family-demo.png"
   xcrun simctl terminate "$udid" com.questscan.roomstudio
   xcrun simctl shutdown "$udid"
-  echo "PASS: $family home and procedural demo launched; screenshots captured"
+  echo "PASS: $family home, settings and procedural demo launched; screenshots captured"
 done < Tests/.output/selected-devices.txt

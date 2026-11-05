@@ -28,6 +28,7 @@ enum ExportTests {
         try testCRC()
         try testZIP()
         #if QUESTSCAN_MODEL_TESTS
+        try testScanOptions()
         try testUSD()
         try testValidation()
         try testPersistence()
@@ -37,6 +38,44 @@ enum ExportTests {
     }
 
     #if QUESTSCAN_MODEL_TESTS
+    static func testScanOptions() throws {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "QUESTSCAN.scanOptions")
+        let standard = ScanOptions.stored()
+        try check(standard.maxPhotos == 32 && standard.maxTriangles == 60_000, "Default scan limits")
+        try check(standard.sensitivity == .balanced && standard.captureInterval == 1.2, "Default sensitivity")
+
+        var conservative = ScanOptions()
+        conservative.selectSensitivity(.conservative)
+        var responsive = ScanOptions()
+        responsive.selectSensitivity(.responsive)
+        try check(responsive.translationThreshold < conservative.translationThreshold, "High sensitivity moves less")
+        try check(responsive.captureInterval < conservative.captureInterval, "High sensitivity interval shorter")
+
+        var choice = ScanOptions()
+        choice.maxPhotos = 16
+        choice.maxTriangles = 40_000
+        choice.photoLongEdge = 960
+        choice.jpegQuality = 0.85
+        choice.selectSensitivity(.responsive)
+        choice.persist()
+        let restored = ScanOptions.stored()
+        try check(restored == choice, "Scan preferences persist and restore")
+
+        var invalid = choice
+        invalid.maxPhotos = 100
+        invalid.maxTriangles = 900_000
+        invalid.photoLongEdge = 12_000
+        invalid.jpegQuality = .nan
+        let safe = invalid.sanitized()
+        try check(safe.maxPhotos == 32 && safe.maxTriangles == 60_000, "Invalid budgets return to bounded defaults")
+        try check(safe.photoLongEdge == 1_280 && safe.jpegQuality == 0.72, "Invalid photo quality returns to defaults")
+        try check(safe.sensitivity == .responsive && safe.translationThreshold == CaptureSensitivity.responsive.minimumMovement,
+                  "Sensitivity preset normalizes capture thresholds")
+        defaults.removeObject(forKey: "QUESTSCAN.scanOptions")
+        print("PASS persistent scan preferences, capture sensitivity and bounded quality settings")
+    }
+
     static func document(textured: Bool = false) -> SceneDocument {
         let part = ScenePart(id: UUID(uuidString: "22222222-3333-4444-5555-666666666666")!,
             name: "壁 \"quoted\"\\path\n日本語", classification: .wall,
