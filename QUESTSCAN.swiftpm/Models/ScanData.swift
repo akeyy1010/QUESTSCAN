@@ -152,7 +152,7 @@ enum CaptureSensitivity: String, Codable, CaseIterable, Identifiable {
 struct ScanOptions: Codable, Equatable {
     var autoCapture = true
     var wireframe = true
-    var maxPhotos = 32
+    var maxPhotos = 1_000
     var sensitivity: CaptureSensitivity = .balanced
     var captureInterval: TimeInterval = CaptureSensitivity.balanced.interval
     var translationThreshold: Float = CaptureSensitivity.balanced.minimumMovement
@@ -161,7 +161,7 @@ struct ScanOptions: Codable, Equatable {
     var photoLongEdge = 1_280
     var jpegQuality = 0.72
 
-    static let photoLimitChoices = [8, 16, 24, 32]
+    static let photoLimitChoices = [8, 16, 24, 32, 64, 128, 256, 512, 1_000]
     static let qualityChoices = [20_000, 40_000, 60_000]
     static let resolutionChoices = [960, 1_280]
     static let jpegQualityChoices: [Double] = [0.58, 0.72, 0.85]
@@ -175,13 +175,20 @@ struct ScanOptions: Codable, Equatable {
 
     static func stored() -> ScanOptions {
         guard let data = UserDefaults.standard.data(forKey: "QUESTSCAN.scanOptions"),
-              let value = try? JSONDecoder().decode(ScanOptions.self, from: data) else { return ScanOptions() }
-        return value.sanitized()
+              var value = try? JSONDecoder().decode(ScanOptions.self, from: data) else { return ScanOptions() }
+        let defaults = UserDefaults.standard
+        if !defaults.bool(forKey: "QUESTSCAN.scanOptions.1000Migration"), value.maxPhotos == 32 {
+            // 32 was the previous app's default cap; carry users to the new 1,000-photo default.
+            value.maxPhotos = 1_000
+        }
+        value = value.sanitized()
+        value.persist()
+        return value
     }
 
     func sanitized() -> ScanOptions {
         var result = self
-        result.maxPhotos = Self.photoLimitChoices.contains(maxPhotos) ? maxPhotos : 32
+        result.maxPhotos = Self.photoLimitChoices.contains(maxPhotos) ? maxPhotos : 1_000
         result.maxTriangles = Self.qualityChoices.contains(maxTriangles) ? maxTriangles : 60_000
         result.photoLongEdge = Self.resolutionChoices.contains(photoLongEdge) ? photoLongEdge : 1_280
         result.jpegQuality = Self.jpegQualityChoices.contains(jpegQuality) ? jpegQuality : 0.72
@@ -198,6 +205,7 @@ struct ScanOptions: Codable, Equatable {
     func persist() {
         guard let data = try? JSONEncoder().encode(sanitized()) else { return }
         UserDefaults.standard.set(data, forKey: "QUESTSCAN.scanOptions")
+        UserDefaults.standard.set(true, forKey: "QUESTSCAN.scanOptions.1000Migration")
     }
 }
 

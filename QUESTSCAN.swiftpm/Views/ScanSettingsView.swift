@@ -123,21 +123,28 @@ struct ScanSettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 9) {
-                    HStack {
+                    HStack(spacing: 8) {
                         Label("写真の最大枚数", systemImage: "photo.stack")
                             .font(.subheadline.weight(.medium))
-                        Spacer()
-                        Text("\(draft.maxPhotos) 枚")
-                            .font(.system(.subheadline, design: .monospaced).weight(.semibold))
+                        Spacer(minLength: 4)
+                        Picker("写真の最大枚数", selection: $draft.maxPhotos) {
+                            ForEach(ScanOptions.photoLimitChoices, id: \.self) { count in
+                                Text("最大 \(count.formatted()) 枚").tag(count)
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text("最大 \(draft.maxPhotos.formatted()) 枚")
+                                    .font(.system(.subheadline, design: .monospaced).weight(.semibold))
+                                Image(systemName: "chevron.up.chevron.down").font(.caption2.weight(.bold))
+                            }
                             .foregroundColor(CyberColor.cyan)
-                    }
-                    Picker("写真の最大枚数", selection: $draft.maxPhotos) {
-                        ForEach(ScanOptions.photoLimitChoices, id: \.self) { count in
-                            Text("\(count) 枚").tag(count)
+                            .padding(.horizontal, 11).padding(.vertical, 8)
+                            .background(CyberColor.raised)
+                            .clipShape(Capsule())
                         }
+                        .pickerStyle(.menu)
                     }
-                    .pickerStyle(.segmented)
-                    Text("上限はアプリ全体で最大32枚です。手動撮影もこの上限に含まれます。")
+                    Text("最大1,000枚まで選択できます。手動撮影も含みます。高枚数モードでは写真を最大640px・1枚180KB、深度を64pxに自動縮小してメモリを抑えます。")
                         .font(.caption2).foregroundColor(CyberColor.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -203,7 +210,7 @@ struct ScanSettingsView: View {
     private var guidance: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "info.circle.fill").foregroundColor(CyberColor.cyan)
-            Text("撮影済みの写真には画質設定の変更は反映されません。高感度設定は写真の重複が増える場合があります。設定はスキャン開始前に調整してください。")
+            Text("撮影済みの写真には画質設定の変更は反映されません。高枚数モードの3D化では処理負荷を制限するため、最大128枚を時間順に均等選択して投影します。高感度設定は写真の重複が増える場合があります。")
                 .font(.caption).foregroundColor(CyberColor.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }

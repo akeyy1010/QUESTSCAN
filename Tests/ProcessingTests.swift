@@ -17,6 +17,7 @@ struct ProcessingTests {
         let red = try jpeg(width: 100, height: 80, red: 0.8, blue: 0.1)
         let blue = try jpeg(width: 100, height: 80, red: 0.1, blue: 0.8)
         try projectionAndDepth(red: red)
+        try highPhotoCountSampling(red: red)
         try cameraTransformAndResize(red: red)
         try bestPhotoAndAttributes(red: red, blue: blue)
         try budgetsAndMalformedGeometry(red: red)
@@ -124,6 +125,20 @@ struct ProcessingTests {
         var corruptCamera = camera
         corruptCamera.transform = Array(repeating: 0, count: 16)
         try expect(try build([mesh], [corruptCamera]).document.texturedTriangleCount == 0, "Singular camera transform must be ignored")
+    }
+
+    private static func highPhotoCountSampling(red: Data) throws {
+        let photos = (0..<130).map { index -> CameraSnapshot in
+            var photo = snapshot(jpeg: red)
+            photo.timestamp = Double(index)
+            return photo
+        }
+        let result = try build([triangle()], photos)
+        try ScanLibrary.validate(result.document)
+        try expect(result.document.photosCaptured == 130, "All captured photos remain counted in the output")
+        try expect(result.document.texturedTriangleCount == 1, "Uniform 128-camera sample must texture eligible geometry")
+        try expect(result.warnings.contains { $0.contains("最大128枚") }, "Projection sampling limit must be disclosed")
+        print("PASS: high-count scans retain photo count and bound texture projection to 128 uniform samples")
     }
 
     private static func cameraTransformAndResize(red: Data) throws {

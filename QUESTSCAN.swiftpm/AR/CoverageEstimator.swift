@@ -8,6 +8,7 @@ import simd
 /// Apple: https://developer.apple.com/documentation/arkit/arcamera/intrinsics
 /// https://developer.apple.com/documentation/arkit/ardepthdata/depthmap
 enum CoverageEstimator {
+    private static let maximumPhotos = 128
     struct Estimate {
         var coverage: Double = 0
         var surfaceArea: Float = 0
@@ -16,7 +17,11 @@ enum CoverageEstimator {
     static func estimate(meshes: [MeshSnapshot], photos: [CameraSnapshot], sampleLimit: Int = 1_200) -> Estimate {
         let totalFaces = meshes.reduce(0) { $0 + $1.indices.count / 3 }
         guard totalFaces > 0 else { return Estimate() }
-        let cameras = photos.compactMap { PhotoProjection($0) }
+        let keptPhotos = min(photos.count, maximumPhotos)
+        let cameraIndices = (0..<keptPhotos).map {
+            min(photos.count - 1, Int((Double($0) + 0.5) * Double(photos.count) / Double(keptPhotos)))
+        }
+        let cameras = cameraIndices.compactMap { PhotoProjection(photos[$0]) }
         let step = max(1, (totalFaces + max(1, sampleLimit) - 1) / max(1, sampleLimit))
         var totalArea: Double = 0
         var sampledArea: Double = 0

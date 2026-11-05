@@ -41,9 +41,20 @@ enum ExportTests {
     static func testScanOptions() throws {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: "QUESTSCAN.scanOptions")
+        defaults.removeObject(forKey: "QUESTSCAN.scanOptions.1000Migration")
         let standard = ScanOptions.stored()
-        try check(standard.maxPhotos == 32 && standard.maxTriangles == 60_000, "Default scan limits")
+        try check(standard.maxPhotos == 1_000 && standard.maxTriangles == 60_000, "Default scan limits")
         try check(standard.sensitivity == .balanced && standard.captureInterval == 1.2, "Default sensitivity")
+
+        var legacy = ScanOptions()
+        legacy.maxPhotos = 32
+        defaults.set(try JSONEncoder().encode(legacy), forKey: "QUESTSCAN.scanOptions")
+        let migrated = ScanOptions.stored()
+        try check(migrated.maxPhotos == 1_000, "Previous default of 32 migrates to 1,000")
+        var explicit32 = ScanOptions()
+        explicit32.maxPhotos = 32
+        explicit32.persist()
+        try check(ScanOptions.stored().maxPhotos == 32, "Explicitly chosen 32-photo limit is preserved")
 
         var conservative = ScanOptions()
         conservative.selectSensitivity(.conservative)
@@ -63,16 +74,17 @@ enum ExportTests {
         try check(restored == choice, "Scan preferences persist and restore")
 
         var invalid = choice
-        invalid.maxPhotos = 100
+        invalid.maxPhotos = 5_000
         invalid.maxTriangles = 900_000
         invalid.photoLongEdge = 12_000
         invalid.jpegQuality = .nan
         let safe = invalid.sanitized()
-        try check(safe.maxPhotos == 32 && safe.maxTriangles == 60_000, "Invalid budgets return to bounded defaults")
+        try check(safe.maxPhotos == 1_000 && safe.maxTriangles == 60_000, "Invalid budgets return to bounded defaults")
         try check(safe.photoLongEdge == 1_280 && safe.jpegQuality == 0.72, "Invalid photo quality returns to defaults")
         try check(safe.sensitivity == .responsive && safe.translationThreshold == CaptureSensitivity.responsive.minimumMovement,
                   "Sensitivity preset normalizes capture thresholds")
         defaults.removeObject(forKey: "QUESTSCAN.scanOptions")
+        defaults.removeObject(forKey: "QUESTSCAN.scanOptions.1000Migration")
         print("PASS persistent scan preferences, capture sensitivity and bounded quality settings")
     }
 

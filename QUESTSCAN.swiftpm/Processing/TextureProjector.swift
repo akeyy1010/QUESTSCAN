@@ -6,7 +6,7 @@ import ImageIO
 /// Suitable for a detached/background task. The caller must dispatch progress to its UI actor.
 enum TextureProjector {
     static let maximumTriangles = 60_000
-    private static let maximumPhotos = 32
+    private static let maximumPhotos = 128
     // 48 source anchors * 8 fallback classes + 128 textured groups <= 512 stored parts.
     private static let maximumSources = 48
     private static let maximumTexturedGroups = 128
@@ -39,7 +39,7 @@ enum TextureProjector {
             if let camera = PreparedCamera(snapshot: photos[index]) { cameras.append(camera) }
         }
         if photos.count > maximumPhotos {
-            warnings.append("写真が多いため、最大32枚を時間順の配列から均等に選びました。")
+            warnings.append("撮影写真はすべて保持しています。3D生成時は処理負荷を抑えるため、時間順に均等選択した最大128枚を写真投影に使用しました。")
         }
         if cameras.count < photoIndices.count {
             warnings.append("画像またはカメラ情報が不正な写真は投影から除外しました。")

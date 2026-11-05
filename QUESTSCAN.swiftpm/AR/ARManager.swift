@@ -415,8 +415,12 @@ final class ARManager: NSObject, ARSessionDelegate {
             let angle = 2 * acos(cosine)
             guard translation >= options.translationThreshold || angle >= options.rotationThreshold else { return }
         }
-        guard let photo = makePhoto(frame, longestSide: lowPower ? min(960, options.photoLongEdge) : options.photoLongEdge,
-                                    jpegQuality: options.jpegQuality) else {
+        let highCountMode = options.maxPhotos > 32
+        let longestSide = highCountMode ? min(640, options.photoLongEdge)
+            : (lowPower ? min(960, options.photoLongEdge) : options.photoLongEdge)
+        let photoByteLimit = highCountMode ? 180_000 : 1_500_000
+        guard let photo = makePhoto(frame, longestSide: longestSide, jpegQuality: options.jpegQuality,
+                                    maximumBytes: photoByteLimit, depthLongestSide: highCountMode ? 64 : 192) else {
             trackingMessage = "写真を保存できませんでした・明るい面を映して再撮影してください"
             if manual { deliverError("カメラ画像の保存に失敗しました", generation: generation) }
             return
@@ -427,27 +431,38 @@ final class ARManager: NSObject, ARSessionDelegate {
         estimateDirty = true
     }
 
-    private func makePhoto(_ frame: ARFrame, longestSide: Int, jpegQuality: Double) -> CameraSnapshot? {
+    private func makePhoto(_ frame: ARFrame, longestSide: Int, jpegQuality: Double,
+                           maximumBytes: Int, depthLongestSide: Int) -> CameraSnapshot? {
         let buffer = frame.capturedImage
         let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
         guard width > 0, height > 0 else { return nil }
-        let scale = min(1, CGFloat(longestSide) / CGFloat(max(width, height)))
-        let image = CIImage(cvPixelBuffer: buffer).transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        let outputWidth = max(1, Int((CGFloat(width) * scale).rounded()))
-        let outputHeight = max(1, Int((CGFloat(height) * scale).rounded()))
-        guard let cgImage = imageContext.createCGImage(image, from: CGRect(x: 0, y: 0, width: CGFloat(outputWidth), height: CGFloat(outputHeight))) else { return nil }
-        // Respect the requested quality where possible, but progressively compress
-        // rather than dropping a useful photo when a detailed room exceeds the cap.
-        let candidates = Array(Set([jpegQuality, max(0.58, jpegQuality * 0.85), 0.58])).sorted(by: >)
+        // At high capture counts, also reduce dimensions if needed so an unusually
+        // noisy image cannot defeat the aggregate in-memory photo budget.
+        var sizeCandidates = [longestSide]
+        if maximumBytes < 1_500_000 {
+            sizeCandidates += [min(480, longestSide), min(320, longestSide)]
+        }
+        sizeCandidates = Array(Set(sizeCandidates)).sorted(by: >)
+        let qualityFloor = maximumBytes < 1_500_000 ? 0.45 : 0.58
+        let candidates = Array(Set([jpegQuality, max(qualityFloor, jpegQuality * 0.85), qualityFloor])).sorted(by: >)
+        let sourceImage = CIImage(cvPixelBuffer: buffer)
         var encodedJPEG: Data?
-        for quality in candidates {
-            let bytes = NSMutableData()
-            guard let destination = CGImageDestinationCreateWithData(bytes, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
-            // No UIImage rotation, displayTransform, or orientation conversion: native image axes.
-            CGImageDestinationAddImage(destination, cgImage, [kCGImageDestinationLossyCompressionQuality: quality,
-                                                              kCGImagePropertyOrientation: 1] as CFDictionary)
-            guard CGImageDestinationFinalize(destination) else { continue }
-            if bytes.length <= 1_500_000 { encodedJPEG = bytes as Data; break }
+        for targetSide in sizeCandidates where encodedJPEG == nil {
+            let scale = min(1, CGFloat(targetSide) / CGFloat(max(width, height)))
+            let image = sourceImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            let outputWidth = max(1, Int((CGFloat(width) * scale).rounded()))
+            let outputHeight = max(1, Int((CGFloat(height) * scale).rounded()))
+            guard let cgImage = imageContext.createCGImage(image, from: CGRect(x: 0, y: 0,
+                width: CGFloat(outputWidth), height: CGFloat(outputHeight))) else { continue }
+            for quality in candidates {
+                let bytes = NSMutableData()
+                guard let destination = CGImageDestinationCreateWithData(bytes, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+                // No UIImage rotation, displayTransform, or orientation conversion: native image axes.
+                CGImageDestinationAddImage(destination, cgImage, [kCGImageDestinationLossyCompressionQuality: quality,
+                                                                  kCGImagePropertyOrientation: 1] as CFDictionary)
+                guard CGImageDestinationFinalize(destination) else { continue }
+                if bytes.length <= maximumBytes { encodedJPEG = bytes as Data; break }
+            }
         }
         guard let jpeg = encodedJPEG else { return nil }
         let transform = frame.camera.transform
@@ -464,13 +479,13 @@ final class ARManager: NSObject, ARSessionDelegate {
                                     intrinsics: (0..<3).flatMap { column in (0..<3).map { intrinsics[column][$0] } },
                                     width: width, height: height, jpeg: jpeg)
         if let depthData = frame.sceneDepth ?? frame.smoothedSceneDepth,
-           let depth = copyDepth(depthData) {
+           let depth = copyDepth(depthData, longestSide: depthLongestSide) {
             result.depth = depth.values; result.depthWidth = depth.width; result.depthHeight = depth.height
         }
         return result
     }
 
-    private func copyDepth(_ data: ARDepthData) -> (values: [Float], width: Int, height: Int)? {
+    private func copyDepth(_ data: ARDepthData, longestSide: Int) -> (values: [Float], width: Int, height: Int)? {
         let buffer = data.depthMap
         guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_DepthFloat32,
               CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess else { return nil }
@@ -479,7 +494,7 @@ final class ARManager: NSObject, ARSessionDelegate {
         let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
         let stride = CVPixelBufferGetBytesPerRow(buffer)
         guard width > 0, height > 0, stride >= width * 4 else { return nil }
-        let scale = min(1.0, 192.0 / Double(max(width, height)))
+        let scale = min(1.0, Double(longestSide) / Double(max(width, height)))
         let outputWidth = max(1, Int((Double(width) * scale).rounded()))
         let outputHeight = max(1, Int((Double(height) * scale).rounded()))
         let confidence = data.confidenceMap
