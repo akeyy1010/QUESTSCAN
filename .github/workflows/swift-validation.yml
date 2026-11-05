@@ -28,6 +28,18 @@ jobs:
           SDKROOT="$SDK" xcrun --sdk iphoneos swiftc -emit-executable -whole-module-optimization -parse-as-library -swift-version 5 \
             -module-name AppModule -sdk "$SDK" -target arm64-apple-ios16.0 \
             "${SOURCES[@]}" -o Tests/.output/QUESTSCAN
+      - name: Check Playgrounds manifest when AppleProductTypes is installed
+        run: |
+          set -euo pipefail
+          ROOT="$(xcode-select -p)/../.."
+          MODULE="$(find "$ROOT" -name AppleProductTypes.swiftmodule -print -quit)"
+          if [ -n "$MODULE" ]; then
+            API_DIR="$(dirname "$MODULE")"
+            xcrun swiftc -typecheck -swift-version 5 -I "$API_DIR" \
+              -package-description-version 5.7.0 QUESTSCAN.swiftpm/Package.swift
+          else
+            echo "AppleProductTypes is not installed in this runner; package opening still needs Swift Playgrounds."
+          fi
       - name: Validate property lists
         if: always()
         run: |
@@ -53,8 +65,10 @@ jobs:
             QUESTSCAN.swiftpm/Processing/DemoScene.swift \
             QUESTSCAN.swiftpm/Processing/TextureProjector.swift \
             QUESTSCAN.swiftpm/Export/ScanLibrary.swift \
+            QUESTSCAN.swiftpm/Export/StoredZIP.swift \
+            QUESTSCAN.swiftpm/Export/USDZExporter.swift \
             Tests/ProcessingTests.swift -o Tests/.output/processing-tests
-          Tests/.output/processing-tests
+          Tests/.output/processing-tests Tests/.output/fixtures
       - name: Upload USDZ fixtures for independent validation
         if: always()
         uses: actions/upload-artifact@v4

@@ -476,7 +476,7 @@ private struct ScanScreenView: View {
 
     private var coveragePercent: Int {
         let value = model.statistics.coverage
-        return Int((value.isFinite ? min(max(value, 0), 0.99) : 0) * 100)
+        return Int((value.isFinite ? min(max(value, 0), 1) : 0) * 100)
     }
 
     private var coverageSummary: some View {

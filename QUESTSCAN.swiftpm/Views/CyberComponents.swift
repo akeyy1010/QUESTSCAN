@@ -177,7 +177,7 @@ struct CoverageGauge: View {
     let progress: Double
     var diameter: CGFloat = 92
 
-    private var fraction: Double { progress.isFinite ? min(max(progress, 0), 0.99) : 0 }
+    private var fraction: Double { progress.isFinite ? min(max(progress, 0), 1) : 0 }
 
     var body: some View {
         ZStack {

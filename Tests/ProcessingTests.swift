@@ -1,7 +1,8 @@
 // Run on macOS from the repository root (no UIKit/RealityKit or device required):
 // swiftc -swift-version 5 -parse-as-library QUESTSCAN.swiftpm/Models/ScanData.swift \
 //   QUESTSCAN.swiftpm/Processing/DemoScene.swift QUESTSCAN.swiftpm/Processing/TextureProjector.swift \
-//   QUESTSCAN.swiftpm/Export/ScanLibrary.swift Tests/ProcessingTests.swift -o /tmp/questscan-processing-tests
+//   QUESTSCAN.swiftpm/Export/ScanLibrary.swift QUESTSCAN.swiftpm/Export/StoredZIP.swift \
+//   QUESTSCAN.swiftpm/Export/USDZExporter.swift Tests/ProcessingTests.swift -o /tmp/questscan-processing-tests
 // /tmp/questscan-processing-tests
 import Foundation
 import CoreGraphics
@@ -18,6 +19,17 @@ struct ProcessingTests {
         try cameraTransformAndResize(red: red)
         try bestPhotoAndAttributes(red: red, blue: blue)
         try budgetsAndMalformedGeometry(red: red)
+        if CommandLine.arguments.count > 1 {
+            let output = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            try USDZExporter.export(DemoScene.make(), to: output.appendingPathComponent("demo-room.usdz"))
+            let realPhoto = try build([triangle()], [snapshot(jpeg: red)]).document
+            let archive = try USDZExporter.makeArchive(realPhoto) { data, adjustment in
+                try expect(adjustment == .identity, "Fixture must use original photo colors")
+                return data
+            }
+            try archive.write(to: output.appendingPathComponent("real-photo.usdz"), options: [.atomic])
+        }
         print("PASS: demo, winding/normals, raw-camera UVs, transform/resize, depth, best photo, grouping, 60k/512 budgets")
     }
 
