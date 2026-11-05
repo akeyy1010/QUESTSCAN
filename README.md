@@ -14,7 +14,7 @@ Swift Playgrounds向けの、空間スキャン・写真テクスチャ投影・
 
 ![iPhoneシミュレータのデモ編集画面](Docs/Screenshots/iphone-demo.png)
 
-設定画面はiPhone／iPadに合わせてレイアウトされ、撮影感度や写真上限、画像品質・形状精度を調整できます。 [iPhone](Docs/Screenshots/iphone-settings.png) / [iPad](Docs/Screenshots/ipad-settings.png) の実際のシミュレータ画面。
+設定画面ではiPhone／iPad上で撮影感度、最大1,000枚の上限、画像品質・形状精度を調整できます。旧設定画面のシミュレータ画像は [検証記録](Docs/Validation.md) に保存していますが、写真上限の表示は1,000枚対応前のものです。
 
 ## 実装した機能
 
