@@ -1,0 +1,61 @@
+name: Swift validation
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apple-sdk-validation:
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apple toolchain
+        run: |
+          xcodebuild -version
+          xcrun swiftc --version
+      - name: Compile and link the complete iOS app using Apple's SDK
+        run: |
+          set -euo pipefail
+          mkdir -p Tests/.output
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          SOURCES=()
+          while IFS= read -r file; do SOURCES+=("$file"); done < <(find QUESTSCAN.swiftpm -name '*.swift' ! -name Package.swift | sort)
+          xcrun swiftc -emit-executable -parse-as-library -swift-version 5 \
+            -module-name AppModule -sdk "$SDK" -target arm64-apple-ios16.0 \
+            "${SOURCES[@]}" -o Tests/.output/QUESTSCAN
+      - name: Validate property lists
+        run: |
+          plutil -lint QUESTSCAN.swiftpm/AppInfo.plist
+          plutil -lint QUESTSCAN.swiftpm/Resources/PrivacyInfo.xcprivacy
+      - name: Run archive, USD scene and persistence integration tests
+        run: |
+          set -euo pipefail
+          swiftc -swift-version 5 -D QUESTSCAN_MODEL_TESTS -parse-as-library \
+            QUESTSCAN.swiftpm/Models/ScanData.swift \
+            QUESTSCAN.swiftpm/Export/StoredZIP.swift \
+            QUESTSCAN.swiftpm/Export/ScanLibrary.swift \
+            QUESTSCAN.swiftpm/Export/USDZExporter.swift \
+            Tests/ExportTests.swift -o Tests/.output/export-tests
+          Tests/.output/export-tests Tests/.output/fixtures
+      - name: Run demo geometry, camera projection and depth tests
+        run: |
+          set -euo pipefail
+          swiftc -swift-version 5 -parse-as-library \
+            QUESTSCAN.swiftpm/Models/ScanData.swift \
+            QUESTSCAN.swiftpm/Processing/DemoScene.swift \
+            QUESTSCAN.swiftpm/Processing/TextureProjector.swift \
+            QUESTSCAN.swiftpm/Export/ScanLibrary.swift \
+            Tests/ProcessingTests.swift -o Tests/.output/processing-tests
+          Tests/.output/processing-tests
+      - name: Upload USDZ fixtures for independent validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: usdz-fixtures
+          path: Tests/.output/fixtures
+          if-no-files-found: error
+          retention-days: 7

@@ -117,6 +117,7 @@ struct ScanStatistics {
     var trackingMessage: String = "カメラをゆっくり動かしてください"
     var trackingGood: Bool = false
     var featureCount: Int = 0
+    var retentionLimited: Bool = false
 }
 
 struct ScanOptions {
