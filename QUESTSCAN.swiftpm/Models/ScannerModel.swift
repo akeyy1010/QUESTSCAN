@@ -146,6 +146,7 @@ final class ScannerModel: ObservableObject {
                         }
                     }
                     if stats.retentionLimited { result.warnings.append("取得上限により一部メッシュを間引き、または古い部分を省略しています。広い部屋は分けてスキャンしてください。") }
+                    result.document.qualityNotes = result.warnings
                     result.document.photosCaptured = photos.count
                     result.document.thumbnailJPEG = photos.first?.jpeg
                     let built = result

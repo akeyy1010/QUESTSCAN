@@ -754,6 +754,11 @@ private struct EditorScreenView: View {
                     Text("平面スキャンです。検出した面のみを表示し、家具の立体形状は復元していません。")
                         .font(.caption2).foregroundColor(CyberColor.warning)
                 }
+                if let notes = document.qualityNotes, !notes.isEmpty {
+                    Text(notes.joined(separator: "\n"))
+                        .font(.caption2).foregroundColor(CyberColor.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Text(model.statusMessage)
                 .font(.caption2).foregroundColor(CyberColor.muted)

@@ -93,6 +93,7 @@ struct SceneDocument: Identifiable, Codable {
     var coverage: Double
     var surfaceArea: Float
     var thumbnailJPEG: Data? = nil
+    var qualityNotes: [String]? = nil
     var triangleCount: Int { parts.reduce(0) { $0 + $1.triangleCount } }
     var texturedTriangleCount: Int { parts.filter { $0.textureJPEG != nil }.reduce(0) { $0 + $1.triangleCount } }
 }
