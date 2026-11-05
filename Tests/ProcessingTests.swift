@@ -1,6 +1,7 @@
 // Run on macOS from the repository root (no UIKit/RealityKit or device required):
 // swiftc -swift-version 5 -parse-as-library QUESTSCAN.swiftpm/Models/ScanData.swift \
 //   QUESTSCAN.swiftpm/Processing/DemoScene.swift QUESTSCAN.swiftpm/Processing/TextureProjector.swift \
+//   QUESTSCAN.swiftpm/Processing/MeshRaycaster.swift \
 //   QUESTSCAN.swiftpm/Export/ScanLibrary.swift QUESTSCAN.swiftpm/Export/StoredZIP.swift \
 //   QUESTSCAN.swiftpm/Export/USDZExporter.swift Tests/ProcessingTests.swift -o /tmp/questscan-processing-tests
 // /tmp/questscan-processing-tests
@@ -19,6 +20,7 @@ struct ProcessingTests {
         try cameraTransformAndResize(red: red)
         try bestPhotoAndAttributes(red: red, blue: blue)
         try budgetsAndMalformedGeometry(red: red)
+        try rayPicking()
         if CommandLine.arguments.count > 1 {
             let output = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
             try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
@@ -214,6 +216,27 @@ struct ProcessingTests {
         try expect(grouped.document.texturedTriangleCount == 128, "Global textured-group budget is incorrect")
         try expect(grouped.warnings.contains { $0.contains("未投影メッシュ") }, "Group-budget downgrade must be disclosed")
         print("Budget: \(grouped.document.parts.count) parts, all \(grouped.document.triangleCount) selected faces retained")
+    }
+
+    private static func rayPicking() throws {
+        var scene = DemoScene.make()
+        let mesh = triangle()
+        let nearPart = ScenePart(name: "近い面", classification: .wall, vertices: mesh.vertices,
+                                 normals: mesh.normals, indices: mesh.indices, textureCoordinates: [], textureJPEG: nil)
+        var farPart = nearPart
+        farPart.id = UUID()
+        farPart.vertices = mesh.vertices.map { $0 + SIMD3<Float>(0, 0, -2) }
+        scene.parts = [farPart, nearPart]
+        let selected = MeshRaycaster.nearestPart(in: scene, origin: .zero, direction: [0, 0, -2])
+        try expect(selected == nearPart.id, "Must select the nearest real triangle, not the first part")
+        try expect(MeshRaycaster.nearestPart(in: scene, origin: [2, 0, 0], direction: [0, 0, -1]) == nil,
+                   "Empty space must not hit a convex hull")
+        try expect(MeshRaycaster.nearestPart(in: scene, origin: .zero, direction: [0, 0, 1]) == nil,
+                   "Triangles behind the ray must not be selected")
+        try expect(MeshRaycaster.nearestPart(in: scene, origin: .zero, direction: .zero) == nil, "Zero ray must be safe")
+        try expect(MeshRaycaster.nearestPart(in: scene, origin: [.nan, 0, 0], direction: [0, 0, -1]) == nil,
+                   "Non-finite ray must be safe")
+        print("PASS: exact triangle ray selection, nearest hit, empty space, invalid rays")
     }
 
     private static func build(_ meshes: [MeshSnapshot], _ photos: [CameraSnapshot]) throws -> BuildResult {

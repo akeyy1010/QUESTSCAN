@@ -121,7 +121,6 @@ struct EditorViewContainer: UIViewRepresentable {
                         do {
                             let entity = try SceneRenderer.makeEntity(for: part)
                             entity.name = part.id.uuidString
-                            entity.generateCollisionShapes(recursive: false)
                             root.addChild(entity)
                             entities[part.id] = entity
                             adjustments[part.id] = part.adjustment
@@ -191,7 +190,9 @@ struct EditorViewContainer: UIViewRepresentable {
 
         @objc private func tapped(_ recognizer: UITapGestureRecognizer) {
             guard let view = view, !model.isBusy else { return }
-            if let entity = view.entity(at: recognizer.location(in: view)), let id = UUID(uuidString: entity.name) {
+            guard let document = model.document,
+                  let ray = view.ray(through: recognizer.location(in: view)) else { return }
+            if let id = MeshRaycaster.nearestPart(in: document, origin: ray.origin, direction: ray.direction) {
                 model.selectPart(id)
                 UISelectionFeedbackGenerator().selectionChanged()
             } else { model.selectPart(nil) }

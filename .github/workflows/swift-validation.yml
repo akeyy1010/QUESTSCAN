@@ -64,11 +64,22 @@ jobs:
             QUESTSCAN.swiftpm/Models/ScanData.swift \
             QUESTSCAN.swiftpm/Processing/DemoScene.swift \
             QUESTSCAN.swiftpm/Processing/TextureProjector.swift \
+            QUESTSCAN.swiftpm/Processing/MeshRaycaster.swift \
             QUESTSCAN.swiftpm/Export/ScanLibrary.swift \
             QUESTSCAN.swiftpm/Export/StoredZIP.swift \
             QUESTSCAN.swiftpm/Export/USDZExporter.swift \
             Tests/ProcessingTests.swift -o Tests/.output/processing-tests
           Tests/.output/processing-tests Tests/.output/fixtures
+      - name: Launch iPhone and iPad simulator home and demo
+        run: bash Tests/simulator_smoke.sh
+      - name: Upload simulator screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-screenshots
+          path: Tests/.output/screenshots
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload USDZ fixtures for independent validation
         if: always()
         uses: actions/upload-artifact@v4
